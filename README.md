@@ -1,60 +1,76 @@
-# Elenni Accessibility Assistant
+# Elenni - Your AI-Powered Visual Assistant
 
-An app for the blind with offline object detection, OCR, and haptic feedback capabilities.
+Elenni is a Flutter-based mobile application that helps visually impaired users identify objects in their surroundings using AI-powered object detection. The app also includes a radio feature for entertainment and information.
 
 ## Features
 
-- Object Detection: Identify objects in the environment using TensorFlow Lite
-- Text Reading: Read text from images using Tesseract OCR
-- Haptic Feedback: Provide tactile feedback for interactions
-- Voice Feedback: Read out detected objects and text
+### 1. Object Detection
+- Real-time object detection using Google ML Kit
+- Voice feedback for detected objects
+- Confidence level reporting
+- Continuous scanning mode
+- Camera controls (flash, zoom)
 
-## Setup Instructions
+### 2. Radio Player
+- Live streaming of Smooth FM Lagos
+- Additional Nigerian and African radio stations (coming soon)
+- Easy-to-use radio interface
+- Station information and descriptions
 
-### Required Files
+### 3. User Interface
+- Bottom navigation for easy access to features
+- Dark theme for better visibility
+- Large, readable text
+- Voice feedback for navigation
+- Settings customization
 
-1. Object Detection Model:
-   - Download the SSD MobileNet v2 model from TensorFlow Hub
-   - Convert it to TensorFlow Lite format
-   - Place the model file at `assets/models/ssd_mobilenet.tflite`
+## How to Use
 
-2. COCO Labels:
-   - Download the COCO labels file
-   - Place it at `assets/labels/coco_labels.txt`
+### Object Detection
+1. Open the app and grant camera permissions
+2. Point your camera at objects you want to identify
+3. The app will automatically detect objects and provide voice feedback
+4. Use the flash button for better visibility in low light
+5. Use the zoom controls to focus on specific areas
 
-3. Tesseract Trained Data:
-   - Download the English trained data file from Tesseract
-   - Place it at `assets/tessdata/eng.traineddata`
+### Radio Player
+1. Navigate to the Radio tab
+2. Select Smooth FM from the Nigerian stations list
+3. Use the play/pause button to control playback
+4. Adjust volume using your device's volume controls
 
-### Development Setup
+### Settings
+1. Access settings from the bottom navigation
+2. Customize app preferences
+3. Adjust voice feedback settings
+4. Manage permissions
 
-1. Install Flutter and required dependencies:
-   ```bash
-   flutter pub get
-   ```
+## Technical Details
 
-2. Run the app:
-   ```bash
-   flutter run
-   ```
+### Dependencies
+- Flutter SDK
+- Google ML Kit for object detection
+- Camera plugin for device camera access
+- Flutter TTS for text-to-speech
+- Just Audio for radio streaming
 
-## Project Structure
+### Permissions Required
+- Camera access for object detection
+- Internet access for radio streaming
+- Storage access for caching
 
-- `lib/`
-  - `screens/`: App screens
-  - `services/`: Core functionality services
-  - `widgets/`: Reusable UI components
-  - `models/`: Data models
+## Getting Started
 
-## Dependencies
+1. Clone the repository
+2. Install Flutter SDK
+3. Run `flutter pub get` to install dependencies
+4. Connect a device or start an emulator
+5. Run `flutter run` to start the app
 
-- Flutter
-- TensorFlow Lite
-- Tesseract OCR
-- Camera
-- Text-to-Speech
-- Vibration
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
