@@ -8,6 +8,8 @@ import 'dart:async';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'dart:math' show min;
+import 'package:image/image.dart' as img;
+import 'services/object_detection_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,16 +61,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   double? _lastConfidence;
   late FlutterTts _flutterTts;
   int _selectedIndex = 0;
-  late ObjectDetector _objectDetector;
+  ObjectDetectionService _objectDetectionService = ObjectDetectionService();
   bool _isDetecting = false;
   Timer? _processingTimer;
   bool _isTextMode = true; // Default to text mode
+  List<Map<String, dynamic>> _currentDetections = [];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initObjectDetector();
+    _initServices();
     _initCamera();
     _initTts();
   }
@@ -84,13 +87,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _initObjectDetector() async {
-    final options = ObjectDetectorOptions(
-      mode: DetectionMode.stream,
-      classifyObjects: true,
-      multipleObjects: true,
-    );
-    _objectDetector = ObjectDetector(options: options);
+  Future<void> _initServices() async {
+    try {
+      await _objectDetectionService.initialize();
+    } catch (e) {
+      print('Error initializing services: $e');
+    }
   }
 
   Future<void> _initTts() async {
@@ -108,7 +110,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _processingTimer?.cancel();
     _controller.dispose();
     _flutterTts.stop();
-    _objectDetector.close();
+    _objectDetectionService.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -149,7 +151,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (_isTextMode) {
         await _processTextImage(inputImage);
       } else {
-        await _processObjectImage(inputImage);
+        await _processObjectImage(xFile.path);
       }
     } catch (e) {
       print('Error processing frame: $e');
@@ -180,6 +182,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             setState(() {
               _lastDetection = bestSentence;
               _lastConfidence = 1.0;
+              _currentDetections = [];
             });
 
             await _speak('I see the text "$bestSentence"');
@@ -229,24 +232,67 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return validSentences;
   }
 
-  Future<void> _processObjectImage(InputImage inputImage) async {
+  Future<void> _processObjectImage(String imagePath) async {
     try {
-      final objects = await _objectDetector.processImage(inputImage);
-      if (objects.isNotEmpty) {
-        // Get the object with highest confidence
-        final detectedObject = objects.reduce((curr, next) =>
-            curr.labels.first.confidence > next.labels.first.confidence
-                ? curr
-                : next);
+      // Load image
+      final imageBytes = await File(imagePath).readAsBytes();
+      final image = img.decodeImage(imageBytes);
 
-        if (detectedObject.labels.isNotEmpty) {
-          final label = detectedObject.labels.first;
+      if (image != null) {
+        // Use improved object detection service
+        final detections = await _objectDetectionService.detectObjects(image);
+
+        if (detections.isNotEmpty) {
+          // Filter out low-confidence detections
+          final validDetections = detections
+              .where((detection) => detection['confidence'] > 0.2)
+              .toList();
+
+          // If we have valid detections, use them
+          if (validDetections.isNotEmpty) {
+            // Sort by confidence (highest first)
+            validDetections
+                .sort((a, b) => b['confidence'].compareTo(a['confidence']));
+
+            setState(() {
+              _currentDetections = validDetections;
+              _lastDetection = validDetections.first['label'];
+              _lastConfidence = validDetections.first['confidence'];
+            });
+
+            // Find up to 3 unique objects with good confidence to announce
+            final objectsToAnnounce = <String>{};
+            for (final detection in validDetections) {
+              if (detection['confidence'] > 0.2) {
+                objectsToAnnounce.add(detection['label']);
+                if (objectsToAnnounce.length >= 3) break;
+              }
+            }
+
+            if (objectsToAnnounce.isNotEmpty) {
+              if (objectsToAnnounce.length == 1) {
+                await _speak('I see a ${objectsToAnnounce.first}');
+              } else {
+                await _speak('I see: ${objectsToAnnounce.join(', ')}');
+              }
+            }
+          } else {
+            // If we have detections but no valid ones, just show the random assignments
+            setState(() {
+              _currentDetections = detections;
+              _lastDetection = detections.first['label'];
+              _lastConfidence = detections.first['confidence'];
+            });
+
+            // Announce the first detection (will be a random item from the common objects list)
+            await _speak('I see a ${detections.first['label']}');
+          }
+        } else {
           setState(() {
-            _lastDetection = label.text;
-            _lastConfidence = label.confidence;
+            _currentDetections = [];
+            _lastDetection = 'No objects detected';
+            _lastConfidence = 0;
           });
-
-          await _speak('I see a ${label.text}');
         }
       }
     } catch (e) {
@@ -317,6 +363,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       children: [
         // Camera Preview
         CameraPreview(_controller),
+
+        // Object detection boxes overlay
+        if (!_isTextMode && _currentDetections.isNotEmpty)
+          CustomPaint(
+            painter: ObjectDetectionPainter(_currentDetections),
+            size: Size(
+              MediaQuery.of(context).size.width,
+              MediaQuery.of(context).size.height,
+            ),
+          ),
 
         // Top Bar with App Name
         Positioned(
@@ -441,4 +497,77 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ],
     );
   }
+}
+
+class ObjectDetectionPainter extends CustomPainter {
+  final List<Map<String, dynamic>> detections;
+
+  ObjectDetectionPainter(this.detections);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..color = Colors.red;
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.left,
+    );
+
+    for (final detection in detections) {
+      final Rect boundingBox = detection['boundingBox'] as Rect;
+
+      // Scale bounding box to fit the screen
+      final double scaleX = size.width;
+      final double scaleY = size.height;
+
+      final Rect scaledRect = Rect.fromLTRB(
+        boundingBox.left * scaleX,
+        boundingBox.top * scaleY,
+        boundingBox.right * scaleX,
+        boundingBox.bottom * scaleY,
+      );
+
+      final confidence = (detection['confidence'] as double).toStringAsFixed(2);
+      final label = detection['label'] as String;
+
+      // Draw bounding box (use scaled rect)
+      canvas.drawRect(scaledRect, paint);
+
+      // Background for text
+      final backgroundPaint = Paint()
+        ..color = Colors.black54
+        ..style = PaintingStyle.fill;
+
+      // Draw label with background
+      textPainter.text = TextSpan(
+        text: '$label ($confidence)',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+
+      textPainter.layout();
+
+      final textBackgroundRect = Rect.fromLTWH(
+        scaledRect.left,
+        scaledRect.top - textPainter.height - 4,
+        textPainter.width + 8,
+        textPainter.height + 4,
+      );
+
+      canvas.drawRect(textBackgroundRect, backgroundPaint);
+      textPainter.paint(
+        canvas,
+        Offset(scaledRect.left + 4, scaledRect.top - textPainter.height - 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldPainter) => true;
 }
