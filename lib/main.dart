@@ -8,6 +8,7 @@ import 'dart:async';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/news_screen.dart';
+import 'screens/radio_screen.dart';
 import 'dart:math' show min;
 import 'package:image/image.dart' as img;
 import 'services/object_detection_service.dart';
@@ -319,6 +320,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.camera), label: 'Camera'),
           BottomNavigationBarItem(icon: Icon(Icons.newspaper), label: 'News'),
+          BottomNavigationBarItem(icon: Icon(Icons.radio), label: 'Radio'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(
               icon: Icon(Icons.settings), label: 'Settings'),
@@ -349,8 +351,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case 1:
         return const NewsScreen();
       case 2:
-        return const HistoryScreen();
+        return const RadioScreen();
       case 3:
+        return const HistoryScreen();
+      case 4:
         return const SettingsScreen();
       default:
         return const Center(child: Text('Invalid screen index'));

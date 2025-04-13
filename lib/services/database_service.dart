@@ -18,16 +18,18 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final databasePath = await getDatabasesPath();
-    final path = join(databasePath, 'elenni_news.db');
+    final path = join(databasePath, 'elenni_app.db');
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDatabase,
+      onUpgrade: _upgradeDatabase,
     );
   }
 
   Future<void> _createDatabase(Database db, int version) async {
+    // Create news articles table
     await db.execute('''
       CREATE TABLE articles(
         id TEXT PRIMARY KEY,
@@ -43,6 +45,45 @@ class DatabaseService {
         isRead INTEGER NOT NULL DEFAULT 0
       )
     ''');
+
+    // Create radio stations table
+    await db.execute('''
+      CREATE TABLE radio_stations(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        streamUrl TEXT NOT NULL,
+        logoUrl TEXT,
+        region TEXT NOT NULL,
+        genre TEXT NOT NULL,
+        description TEXT,
+        country TEXT,
+        language TEXT,
+        website TEXT,
+        isFavorite INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  Future<void> _upgradeDatabase(
+      Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add radio stations table in version 2
+      await db.execute('''
+        CREATE TABLE radio_stations(
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          streamUrl TEXT NOT NULL,
+          logoUrl TEXT,
+          region TEXT NOT NULL,
+          genre TEXT NOT NULL,
+          description TEXT,
+          country TEXT,
+          language TEXT,
+          website TEXT,
+          isFavorite INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+    }
   }
 
   // CRUD Operations for NewsArticle
@@ -169,6 +210,84 @@ class DatabaseService {
       await db.update(
         'articles',
         {'isFavorite': article.isFavorite ? 0 : 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+  }
+
+  // CRUD Operations for Radio Stations
+
+  Future<int> insertRadioStation(Map<String, dynamic> station) async {
+    final db = await database;
+    return await db.insert(
+      'radio_stations',
+      station,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getRadioStations({
+    String? region,
+    String? genre,
+    int limit = 50,
+    int offset = 0,
+    bool favoritesOnly = false,
+  }) async {
+    final db = await database;
+
+    String query = 'SELECT * FROM radio_stations';
+    List<dynamic> arguments = [];
+
+    if (region != null || genre != null || favoritesOnly) {
+      query += ' WHERE';
+
+      if (region != null) {
+        query += ' region = ?';
+        arguments.add(region);
+      }
+
+      if (genre != null) {
+        if (region != null) query += ' AND';
+        query += ' genre = ?';
+        arguments.add(genre);
+      }
+
+      if (favoritesOnly) {
+        if (region != null || genre != null) query += ' AND';
+        query += ' isFavorite = 1';
+      }
+    }
+
+    query += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+    arguments.add(limit);
+    arguments.add(offset);
+
+    return await db.rawQuery(query, arguments);
+  }
+
+  Future<Map<String, dynamic>?> getRadioStationById(String id) async {
+    final db = await database;
+    final maps = await db.query(
+      'radio_stations',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.first;
+    }
+    return null;
+  }
+
+  Future<void> toggleRadioStationFavorite(String id) async {
+    final db = await database;
+    final station = await getRadioStationById(id);
+
+    if (station != null) {
+      await db.update(
+        'radio_stations',
+        {'isFavorite': station['isFavorite'] == 1 ? 0 : 1},
         where: 'id = ?',
         whereArgs: [id],
       );
