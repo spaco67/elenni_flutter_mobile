@@ -1,4 +1,4 @@
-# Accessibility Assistant
+# Elenni Accessibility Assistant
 
 An app for the blind with offline object detection, OCR, and haptic feedback capabilities.
 
