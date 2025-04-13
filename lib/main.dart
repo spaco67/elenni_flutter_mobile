@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:async';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
+import 'dart:math' show min;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -164,26 +165,68 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       await textRecognizer.close();
 
       if (recognizedText.text.isNotEmpty) {
-        // Split text into words and filter out noise
-        final words = recognizedText.text
-            .split(RegExp(r'[\s\n]+'))
-            .where((word) => word.length > 2)
-            .where((word) => !word.contains(RegExp(r'[^a-zA-Z0-9]')))
-            .toList();
+        // Clean and process the recognized text
+        final text = recognizedText.text.trim();
 
-        if (words.isNotEmpty) {
-          final bestWord = words.first;
-          setState(() {
-            _lastDetection = bestWord;
-            _lastConfidence = 1.0;
-          });
+        // Extract sentences from the text
+        final sentences = _extractSentences(text);
 
-          await _speak('I see the text "$bestWord"');
+        if (sentences.isNotEmpty) {
+          // Get the most significant sentence (usually the first detected)
+          final bestSentence = sentences.first;
+
+          // Only update UI and speak if we have a meaningful sentence
+          if (bestSentence.length > 2) {
+            setState(() {
+              _lastDetection = bestSentence;
+              _lastConfidence = 1.0;
+            });
+
+            await _speak('I see the text "$bestSentence"');
+          }
         }
       }
     } catch (e) {
       print('Error processing text image: $e');
     }
+  }
+
+  List<String> _extractSentences(String text) {
+    // Remove extra spaces and line breaks
+    final cleanedText = text.replaceAll(RegExp(r'\s+'), ' ');
+
+    // Split text into sentences based on common sentence terminators
+    List<String> rawSentences = cleanedText.split(RegExp(r'(?<=[.!?])\s+'));
+
+    // Further cleanup and validation
+    List<String> validSentences = [];
+    for (String sentence in rawSentences) {
+      // Remove any non-alphanumeric characters from start and end, but keep internal punctuation
+      String trimmed = sentence
+          .trim()
+          .replaceAll(RegExp(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9.!?]+$'), '');
+
+      // Only keep sentences that have meaningful content (more than 2 chars and not just numbers)
+      if (trimmed.length > 2 && RegExp(r'[a-zA-Z]').hasMatch(trimmed)) {
+        validSentences.add(trimmed);
+      }
+    }
+
+    // If no valid sentences were found, try to extract at least a phrase
+    if (validSentences.isEmpty && cleanedText.length > 2) {
+      // Get the longest sequence of words that might form a meaningful phrase
+      final words = cleanedText.split(' ');
+      if (words.length > 1) {
+        // Join multiple words to form a phrase
+        final phrase = words.take(min(5, words.length)).join(' ');
+        validSentences.add(phrase);
+      } else if (cleanedText.length > 2) {
+        // If all else fails, just use the cleaned text
+        validSentences.add(cleanedText);
+      }
+    }
+
+    return validSentences;
   }
 
   Future<void> _processObjectImage(InputImage inputImage) async {
